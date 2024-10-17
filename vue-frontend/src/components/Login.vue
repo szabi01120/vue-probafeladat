@@ -34,8 +34,7 @@
             username: this.username,
             password: this.password
           });
-          this.message = 'Login successful!'; // Sikeres bejelentkezés
-          // Itt elmentheted a kapott token-t vagy felhasználói információt, ha szükséges
+          this.message = 'Login successful!'; 
         } catch (error) {
           console.error(error);
           this.message = 'Login failed. Please check your credentials.'; // Hibás bejelentkezés

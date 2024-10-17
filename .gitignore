@@ -1,1 +1,9 @@
-.node_modules
+/vue-frontend/node_modules
+/vue-frontend/.vscode
+
+# Ignore backend specific files
+/express/node_modules
+
+# Ignore common system files
+.DS_Store
+Thumbs.db
