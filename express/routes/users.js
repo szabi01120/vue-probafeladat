@@ -1,7 +1,6 @@
 const express = require('express')
-const { createHash } = require('crypto')
 const db = require('../services/dbConnect')
-const hash = require('./hash')
+const hash = require('../services/hash')
 const router = express.Router()
 
 router.post('/api/users', (req, res) => {

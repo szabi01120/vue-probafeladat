@@ -1,6 +1,7 @@
 <script setup>
 import HelloWorld from './components/HelloWorld.vue'
 import TheWelcome from './components/TheWelcome.vue'
+import Protected from './components/Protected.vue'
 import Login from './components/Login.vue'
 </script>
 
@@ -15,7 +16,7 @@ import Login from './components/Login.vue'
 
   <main>
     <Login />
-  </main>
+</main>
 </template>
 
 <style scoped>
