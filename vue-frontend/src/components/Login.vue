@@ -1,61 +1,64 @@
+<script setup>
+import { ref } from 'vue'
+import axios from 'axios'
+
+// Állapotváltozók
+const username = ref('')
+const password = ref('')
+// Az emit függvény inicializálása
+const emit = defineEmits(['login'])
+
+// A bejelentkezési állapotot prop-ként kapjuk meg a szülő komponenstől
+defineProps(['isLoggedIn'])
+
+async function loginUser() {
+  try {
+    const response = await axios.post('http://localhost:3000/api/login', {
+      username: username.value,
+      password: password.value
+    }, {
+      withCredentials: true
+    });
+
+    // Emitáljuk a bejelentkezési állapotot a szülő felé
+    emit('login', response.data.isLoggedIn)
+
+    const sessionId = response.headers['x-session-id'];
+    if (sessionId) {
+      document.cookie = `sessionId=${sessionId}; path=/; HttpOnly; Secure`;
+    }
+
+  } catch (error) {
+    console.error('Bejelentkezési hiba:', error)
+    alert('Sikertelen bejelentkezés. Kérjük, ellenőrizze a felhasználónevet és jelszót.')
+  }
+}
+</script>
+
 <template>
   <div class="login">
-    <h1 v-if="loggedIn">BELÉPTÉL!</h1>
-    <p v-if="loggedIn">Ez a védett oldal.</p>
+    <div v-if="isLoggedIn">
+      <h1>BELÉPTÉL!</h1>
+      <p>Ez a védett oldal.</p>
+    </div>
 
+    <!-- Bejelentkezési űrlap csak akkor jelenik meg, ha nincs bejelentkezve -->
     <div v-else>
-      <h1>Login</h1>
+      <h1>Bejelentkezés</h1>
       <form @submit.prevent="loginUser">
         <div>
-          <label for="username">Username</label>
+          <label for="username">Felhasználónév</label>
           <input v-model="username" type="text" id="username" required />
         </div>
         <div>
-          <label for="password">Password</label>
+          <label for="password">Jelszó</label>
           <input v-model="password" type="password" id="password" required />
         </div>
-        <button type="submit">Login</button>
+        <button type="submit">Bejelentkezés</button>
       </form>
-      <p v-if="message">{{ message }}</p>
     </div>
   </div>
 </template>
-
-<script>
-import axios from 'axios';
-
-export default {
-  data() {
-    return {
-      username: '',
-      password: '',
-      message: '',
-      loggedIn: false 
-    };
-  },
-  methods: {
-    async loginUser() {
-      try {
-        const response = await axios.post('http://localhost:3000/api/login', {
-          username: this.username,
-          password: this.password
-        }, {
-          withCredentials: true
-        });
-
-        this.message = 'Login successful!';
-        document.cookie = `session_id=${response.data.session_id}; path=/`;
-
-        this.loggedIn = true;
-
-      } catch (error) {
-        console.error(error);
-        this.message = 'Login failed. Please check your credentials.';
-      }
-    },
-  }
-};
-</script>
 
 <style scoped>
 .login {

@@ -1,8 +1,42 @@
 <script setup>
+import { defineProps, ref, watch, onMounted } from 'vue'
 import HelloWorld from './components/HelloWorld.vue'
-import TheWelcome from './components/TheWelcome.vue'
-import Protected from './components/Protected.vue'
 import Login from './components/Login.vue'
+import axios from 'axios'
+
+axios.defaults.withCredentials = true; // Globális beállítás
+
+const isLoggedIn = ref(false)
+const user = ref(null)
+
+// Bejelentkezés ellenőrzése
+async function checkAuth() {
+  try {
+    const response = await axios.get('http://localhost:3000/api/check-auth', {
+      headers: {
+        'x-session-id': document.cookie.replace(/(?:(?:^|.*;\s*)sessionId\s*=\s*([^;]*).*$)|^.*$/, "$1")
+      },
+      withCredentials: true
+    });
+
+    console.log('checkAuth response:', response.data);
+    if(response.data.isLoggedIn) {
+      user.value = response.data.username;
+      return isLoggedIn.value = true;
+    } else {
+      console.log('isLoggedIn value:', isLoggedIn.value);
+      return isLoggedIn.value = false;
+    }
+
+  } catch (error) {
+    isLoggedIn.value = false;
+    console.error('Nincs bejelentkezve!', error);
+  }
+}
+
+onMounted(() => {
+  checkAuth();
+});
 </script>
 
 <template>
@@ -15,8 +49,8 @@ import Login from './components/Login.vue'
   </header>
 
   <main>
-    <Login />
-</main>
+    <Login :isLoggedIn="isLoggedIn" />
+  </main>
 </template>
 
 <style scoped>
