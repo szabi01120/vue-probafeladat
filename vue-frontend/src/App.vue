@@ -33,14 +33,6 @@ async function checkAuth() {
   }
 }
 
-// Eseménykezelő a sikeres bejelentkezéshez
-function handleLogin(isLogged) {
-  if (isLogged) {
-    isLoggedIn.value = true;
-    checkAuth();
-  }
-}
-
 onMounted(() => {
   checkAuth();
 });
@@ -55,6 +47,6 @@ onMounted(() => {
 
   <main>
     <!-- Login komponensnél figyeljük a bejelentkezési eseményt -->
-    <Login :isLoggedIn="isLoggedIn" @login="handleLogin" />
+    <Login :isLoggedIn="isLoggedIn" :user="user" @loginSuccess="checkAuth" />
   </main>
 </template>

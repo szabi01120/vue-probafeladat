@@ -1,25 +1,13 @@
 const express = require('express');
-const session = require('express-session');
 const cors = require('cors');
 const login = require('./routes/login');
 const users = require('./routes/users');
 const cookieParser = require('cookie-parser');
+const sessionMiddleware = require('./routes/sessionConfig');
+require('dotenv').config();
 
 const app = express();
-const port = 3000;
-
-const sessionMiddleware = session({
-  secret: 'secret',
-  name: 'sessionId',
-  resave: false,
-  saveUninitialized: false,
-  cookie: {
-    httpOnly: true,
-    secure: false,
-    maxAge: 10 * 60 * 1000,
-  },
-  unset: 'destroy'
-});
+const port = process.env.PORT || 3000;
 
 app.use(sessionMiddleware);
 app.use(cookieParser());
@@ -32,11 +20,6 @@ app.use(cors({
   credentials: true,
   exposedHeaders: ['X-Session-Id']
 }));
-
-app.use((req, res, next) => {
-  res.setHeader('Access-Control-Expose-Headers', 'X-Session-Id');
-  next();
-});
 
 app.use(login.router);
 app.use(users);

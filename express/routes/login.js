@@ -7,9 +7,21 @@ require('dotenv').config();
 
 let userSessions = {};
 
+function clearSession(sessionId) {
+    delete userSessions[sessionId];
+}
+
+function checkIpChange(sessionId, ip) {
+    if (userSessions[sessionId].ip !== ip) {
+        clearSession(sessionId);
+        return false;
+    }
+    return true;
+}
+
 function checkSessionExpiration(sessionId) {
     if (userSessions[sessionId] && userSessions[sessionId].timeout < Date.now()) {
-        delete userSessions[sessionId];
+        clearSession(sessionId);
         return false;
     }
     return true;
@@ -18,7 +30,7 @@ function checkSessionExpiration(sessionId) {
 function clearExpiredSessions() {
     for (let sessionId in userSessions) {
         if (userSessions[sessionId].timeout < Date.now()) {
-            delete userSessions[sessionId];
+            clearSession(sessionId);
         }
     }
 }
@@ -30,10 +42,13 @@ function userLoggedIn(req, res, next) {
     clearExpiredSessions();
 
     if (sessionId && userSessions[sessionId]) {
-        if (!checkSessionExpiration(sessionId)) {
-            return res.status(401).json({ error: 'Session lejárt, kérjük jelentkezzen be újra.' });
+        if (!checkIpChange(sessionId, req.ip)) {
+            return res.status(401).json({ isLoggedIn: false, error: 'IP cím változás történt!' });
         }
-        userSessions[sessionId].timeout = Date.now() + (parseInt(process.env.SESSION_TIMEOUT) || 1 * 60 * 1000);
+        if (!checkSessionExpiration(sessionId)) {
+            return res.status(401).json({ isLoggedIn: false, error: 'Session lejárt, kérjük jelentkezzen be újra.' });
+        }
+        userSessions[sessionId].timeout = Date.now() + (parseInt(process.env.SESSION_TIMEOUT) || 30 * 60 * 1000);
         next();
     } else {
         return res.status(401).json({ isLoggedIn: false, error: 'Kérjük jelentkezzen be!' });
@@ -41,7 +56,8 @@ function userLoggedIn(req, res, next) {
 }
 
 router.get('/api/check-auth', userLoggedIn, (req, res) => {
-    return res.json({ isLoggedIn: true, username: req.session.username });
+    const sessionId = req.headers['x-session-id'];
+    return res.json({ isLoggedIn: true, username: userSessions[sessionId].username });
 });
 
 router.post('/api/login', (req, res) => {
@@ -61,8 +77,7 @@ router.post('/api/login', (req, res) => {
             userSessions[sessionId] = {
                 accountId: rows[0].accountId, 
                 ip: req.ip,
-                // timeout: Date.now() + (10 * 60 * 1000),
-                timeout: Date.now() + (parseInt(process.env.SESSION_TIMEOUT) || 1 * 60 * 1000),
+                timeout: Date.now() + (parseInt(process.env.SESSION_TIMEOUT) || 30 * 60 * 1000),
                 username: username,
                 sessionId: sessionId
             };
