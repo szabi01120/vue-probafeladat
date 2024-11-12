@@ -1,10 +1,10 @@
 <script setup>
-import { defineProps, ref, watch, onMounted } from 'vue'
+import { ref, onMounted } from 'vue'
 import HelloWorld from './components/HelloWorld.vue'
 import Login from './components/Login.vue'
 import axios from 'axios'
 
-axios.defaults.withCredentials = true; // Globális beállítás
+axios.defaults.withCredentials = true;
 
 const isLoggedIn = ref(false)
 const user = ref(null)
@@ -22,15 +22,22 @@ async function checkAuth() {
     console.log('checkAuth response:', response.data);
     if(response.data.isLoggedIn) {
       user.value = response.data.username;
-      return isLoggedIn.value = true;
+      isLoggedIn.value = true;
     } else {
-      console.log('isLoggedIn value:', isLoggedIn.value);
-      return isLoggedIn.value = false;
+      isLoggedIn.value = false;
     }
 
   } catch (error) {
     isLoggedIn.value = false;
     console.error('Nincs bejelentkezve!', error);
+  }
+}
+
+// Eseménykezelő a sikeres bejelentkezéshez
+function handleLogin(isLogged) {
+  if (isLogged) {
+    isLoggedIn.value = true;
+    checkAuth();
   }
 }
 
@@ -41,43 +48,13 @@ onMounted(() => {
 
 <template>
   <header>
-    <img alt="Vue logo" class="logo" src="./assets/logo.svg" width="125" height="125" />
-
     <div class="wrapper">
       <HelloWorld msg="You did it!" />
     </div>
   </header>
 
   <main>
-    <Login :isLoggedIn="isLoggedIn" />
+    <!-- Login komponensnél figyeljük a bejelentkezési eseményt -->
+    <Login :isLoggedIn="isLoggedIn" @login="handleLogin" />
   </main>
 </template>
-
-<style scoped>
-header {
-  line-height: 1.5;
-}
-
-.logo {
-  display: block;
-  margin: 0 auto 2rem;
-}
-
-@media (min-width: 1024px) {
-  header {
-    display: flex;
-    place-items: center;
-    padding-right: calc(var(--section-gap) / 2);
-  }
-
-  .logo {
-    margin: 0 2rem 0 0;
-  }
-
-  header .wrapper {
-    display: flex;
-    place-items: flex-start;
-    flex-wrap: wrap;
-  }
-}
-</style>

@@ -2,13 +2,10 @@
 import { ref } from 'vue'
 import axios from 'axios'
 
-// Állapotváltozók
 const username = ref('')
 const password = ref('')
-// Az emit függvény inicializálása
 const emit = defineEmits(['login'])
 
-// A bejelentkezési állapotot prop-ként kapjuk meg a szülő komponenstől
 defineProps(['isLoggedIn'])
 
 async function loginUser() {
@@ -24,8 +21,9 @@ async function loginUser() {
     emit('login', response.data.isLoggedIn)
 
     const sessionId = response.headers['x-session-id'];
-    if (sessionId) {
-      document.cookie = `sessionId=${sessionId}; path=/; HttpOnly; Secure`;
+    if (sessionId) {      
+      console.log('sessionId:', typeof(sessionId));
+      document.cookie = `sessionId=${sessionId}; path=/;`;
     }
 
   } catch (error) {

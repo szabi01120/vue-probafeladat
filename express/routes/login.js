@@ -3,38 +3,45 @@ const router = express.Router();
 const hash = require('../services/hash');
 const db = require('../services/dbConnect');
 const crypto = require('crypto');
+require('dotenv').config();
 
 let userSessions = {};
 
-function userLoggedIn(req, res, next) {
-    console.log('userSessions from middleware:', userSessions);
-    if (req.session && req.session.loggedin) {
-        next();
-    } else {
-        console.log('Nincs bejelentkezve!');
-        res.status(401).json({ error: 'Please log in to access this route.' });
+function checkSessionExpiration(sessionId) {
+    if (userSessions[sessionId] && userSessions[sessionId].timeout < Date.now()) {
+        delete userSessions[sessionId];
+        return false;
+    }
+    return true;
+}
+
+function clearExpiredSessions() {
+    for (let sessionId in userSessions) {
+        if (userSessions[sessionId].timeout < Date.now()) {
+            delete userSessions[sessionId];
+        }
     }
 }
 
-router.get('/api/check-auth', (req, res) => {
-    console.log('userSessions:', userSessions);
-    console.log('SESSION ID FROM AUTH:', req.headers['x-session-id']);
-    if (req.headers['x-session-id']) {
-        const sessionId = req.headers['x-session-id'];
-        console.log('SESSION ID FROM AUTH:', sessionId);
-        if (userSessions[sessionId]) {
-            if (userSessions[sessionId].timeout > Date.now()) {
-                console.log('Session is valid:', userSessions[sessionId]);
-                return res.json({ isLoggedIn: true, username: req.session.username });
-            } else {
-                delete userSessions[sessionId];
-                console.log('SESSION TIMEOUT:', req.session);
-                return res.json({ isLoggedIn: false });
-            }
+function userLoggedIn(req, res, next) {
+    const sessionId = req.headers['x-session-id'];
+    console.log('userSessions from middleware:', userSessions);
+
+    clearExpiredSessions();
+
+    if (sessionId && userSessions[sessionId]) {
+        if (!checkSessionExpiration(sessionId)) {
+            return res.status(401).json({ error: 'Session lejárt, kérjük jelentkezzen be újra.' });
         }
+        userSessions[sessionId].timeout = Date.now() + (parseInt(process.env.SESSION_TIMEOUT) || 1 * 60 * 1000);
+        next();
     } else {
-        return res.json({ isLoggedIn: false });
+        return res.status(401).json({ isLoggedIn: false, error: 'Kérjük jelentkezzen be!' });
     }
+}
+
+router.get('/api/check-auth', userLoggedIn, (req, res) => {
+    return res.json({ isLoggedIn: true, username: req.session.username });
 });
 
 router.post('/api/login', (req, res) => {
@@ -54,13 +61,13 @@ router.post('/api/login', (req, res) => {
             userSessions[sessionId] = {
                 accountId: rows[0].accountId, 
                 ip: req.ip,
-                timeout: Date.now() + (10 * 60 * 1000),
+                // timeout: Date.now() + (10 * 60 * 1000),
+                timeout: Date.now() + (parseInt(process.env.SESSION_TIMEOUT) || 1 * 60 * 1000),
                 username: username,
                 sessionId: sessionId
             };
 
-            res.setHeader('X-Session-Id', sessionId);    
-            console.log('SESSION ID login:', sessionId);
+            res.setHeader('X-Session-Id', sessionId);   
             res.json({ isLoggedIn: true, message: 'Sikeres bejelentkezés!' });
         } else {
             res.status(401).json({ isLoggedIn: false, error: 'Hibás felhasználónév vagy jelszó!' });
