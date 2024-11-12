@@ -6,6 +6,7 @@ const crypto = require('crypto');
 require('dotenv').config();
 
 let userSessions = {};
+let defaultSessionTimeout = 30 * 60 * 1000;
 
 function clearSession(sessionId) {
     delete userSessions[sessionId];
@@ -48,7 +49,11 @@ function userLoggedIn(req, res, next) {
         if (!checkSessionExpiration(sessionId)) {
             return res.status(401).json({ isLoggedIn: false, error: 'Session lejárt, kérjük jelentkezzen be újra.' });
         }
-        userSessions[sessionId].timeout = Date.now() + (parseInt(process.env.SESSION_TIMEOUT) || 30 * 60 * 1000);
+
+        const remainingTime = userSessions[sessionId].timeout - Date.now();
+        res.append('X-Session-Timeout', remainingTime.toString());
+
+        userSessions[sessionId].timeout = Date.now() + (parseInt(process.env.SESSION_TIMEOUT) || defaultSessionTimeout);
         next();
     } else {
         return res.status(401).json({ isLoggedIn: false, error: 'Kérjük jelentkezzen be!' });
@@ -77,7 +82,7 @@ router.post('/api/login', (req, res) => {
             userSessions[sessionId] = {
                 accountId: rows[0].accountId, 
                 ip: req.ip,
-                timeout: Date.now() + (parseInt(process.env.SESSION_TIMEOUT) || 30 * 60 * 1000),
+                timeout: Date.now() + (parseInt(process.env.SESSION_TIMEOUT) || defaultSessionTimeout),
                 username: username,
                 sessionId: sessionId
             };
