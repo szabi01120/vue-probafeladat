@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import HelloWorld from './components/HelloWorld.vue'
-import Login from './components/Login.vue'
+import MainSite from './components/MainSite.vue'
 import axios from 'axios'
 
 axios.defaults.withCredentials = true;
@@ -21,7 +21,6 @@ async function checkAuth() {
     });
 
     console.log('checkAuth response:', response.data);
-    console.log('session timeout: ', response.headers['x-session-timeout']);
     if(response.data.isLoggedIn) {
       user.value = response.data.username;
       isLoggedIn.value = true;
@@ -32,7 +31,6 @@ async function checkAuth() {
 
   } catch (error) {
     isLoggedIn.value = false;
-    console.error('Nincs bejelentkezve!', error);
   }
 }
 
@@ -49,6 +47,6 @@ onMounted(() => {
   </header>
 
   <main>
-    <Login :isLoggedIn="isLoggedIn" :user="user" :initialSessionTimeout="initialSessionTimeout" @loginSuccess="checkAuth" />
+    <MainSite :isLoggedIn="isLoggedIn" :user="user" :initialSessionTimeout="initialSessionTimeout" @loginSuccess="checkAuth" />
   </main>
 </template>
