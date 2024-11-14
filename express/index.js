@@ -18,7 +18,7 @@ app.use(express.urlencoded({ extended: true }));
 app.use(cors({
   origin: 'http://127.0.0.1:5173',
   credentials: true,
-  exposedHeaders: ['X-Session-Id']
+  exposedHeaders: ['X-Session-Id', 'X-Session-Timeout']
 }));
 
 app.use(login.router);

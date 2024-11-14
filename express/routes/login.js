@@ -49,11 +49,13 @@ function userLoggedIn(req, res, next) {
         if (!checkSessionExpiration(sessionId)) {
             return res.status(401).json({ isLoggedIn: false, error: 'Session lejárt, kérjük jelentkezzen be újra.' });
         }
+        
+        userSessions[sessionId].timeout = Date.now() + (parseInt(process.env.SESSION_TIMEOUT) || defaultSessionTimeout) + 10 * 1000;
+
+        req.session.cookie.maxAge = parseInt(process.env.SESSION_TIMEOUT) || defaultSessionTimeout;
 
         const remainingTime = userSessions[sessionId].timeout - Date.now();
         res.append('X-Session-Timeout', remainingTime.toString());
-
-        userSessions[sessionId].timeout = Date.now() + (parseInt(process.env.SESSION_TIMEOUT) || defaultSessionTimeout);
         next();
     } else {
         return res.status(401).json({ isLoggedIn: false, error: 'Kérjük jelentkezzen be!' });

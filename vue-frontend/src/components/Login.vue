@@ -1,16 +1,17 @@
 <script setup>
-import { ref } from 'vue'
-import axios from 'axios'
+import { ref, computed, watch } from 'vue';
+import axios from 'axios';
 
-// Bemeneti értékek
-const username = ref('')
-const password = ref('')
+const username = ref('');
+const password = ref('');
 
 // Props és események
-const props = defineProps(['isLoggedIn', 'user'])
-const emit = defineEmits(['loginSuccess'])
+const props = defineProps(['isLoggedIn', 'user', 'initialSessionTimeout']);
+const emit = defineEmits(['loginSuccess']);
 
-const toastMessage = ref('')
+const sessionTimeout = ref(props.initialSessionTimeout);
+const toastMessage = ref('');
+let countdownInterval = null;
 
 function setSessionCookie(sessionId) {
   document.cookie = `sessionId=${sessionId}; path=/;`;
@@ -19,6 +20,27 @@ function setSessionCookie(sessionId) {
 function showToast(message) {
   toastMessage.value = message;
   setTimeout(() => toastMessage.value = '', 3000); // 3 másodperc
+}
+
+const formattedTimeout = computed(() => {
+  const totalSeconds = Math.floor(sessionTimeout.value / 1000);
+  const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+  const seconds = String(totalSeconds % 60).padStart(2, '0');
+  return `${minutes}:${seconds}`;
+});
+
+function startSessionCountdown(timeout) {
+  sessionTimeout.value = timeout;
+
+  countdownInterval = setInterval(() => {
+    sessionTimeout.value -= 1000;
+
+    if (sessionTimeout.value <= 0) {
+      clearInterval(countdownInterval);
+      showToast('A munkamenet lejárt. Kérjük, jelentkezzen be újra.');
+      emit('loginSuccess');
+    }
+  }, 1000);
 }
 
 async function loginUser() {
@@ -31,6 +53,7 @@ async function loginUser() {
     });
 
     const sessionId = response.headers['x-session-id'];
+
     if (sessionId) {      
       console.log('Session ID sikeresen beállítva:', sessionId);
       setSessionCookie(sessionId);
@@ -42,6 +65,12 @@ async function loginUser() {
     showToast('Sikertelen bejelentkezés. Kérjük, ellenőrizze a felhasználónevet és jelszót.');
   }
 }
+
+watch(() => props.initialSessionTimeout, (newTimeout) => {
+  if (newTimeout) {
+    startSessionCountdown(newTimeout);
+  }
+});
 </script>
 
 <template>
@@ -50,9 +79,9 @@ async function loginUser() {
       <h1>BELÉPTÉL!</h1>
       <h3>Üdvözöllek, {{ user }}!</h3>
       <p>Ez a védett oldal.</p>
+      <h4>A munkamenet lejár: {{ formattedTimeout }}</h4>
     </div>
 
-    <!-- Bejelentkezési űrlap csak akkor jelenik meg, ha nincs bejelentkezve -->
     <div v-else>
       <h1>Bejelentkezés</h1>
       <form @submit.prevent="loginUser">

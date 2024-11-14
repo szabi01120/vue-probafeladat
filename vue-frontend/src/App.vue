@@ -7,6 +7,7 @@ import axios from 'axios'
 axios.defaults.withCredentials = true;
 
 const isLoggedIn = ref(false)
+const initialSessionTimeout = ref(null)
 const user = ref(null)
 
 // Bejelentkezés ellenőrzése
@@ -20,9 +21,11 @@ async function checkAuth() {
     });
 
     console.log('checkAuth response:', response.data);
+    console.log('session timeout: ', response.headers['x-session-timeout']);
     if(response.data.isLoggedIn) {
       user.value = response.data.username;
       isLoggedIn.value = true;
+      initialSessionTimeout.value = response.headers['x-session-timeout'];
     } else {
       isLoggedIn.value = false;
     }
@@ -47,6 +50,6 @@ onMounted(() => {
 
   <main>
     <!-- Login komponensnél figyeljük a bejelentkezési eseményt -->
-    <Login :isLoggedIn="isLoggedIn" :user="user" @loginSuccess="checkAuth" />
+    <Login :isLoggedIn="isLoggedIn" :user="user" :initialSessionTimeout="initialSessionTimeout" @loginSuccess="checkAuth" />
   </main>
 </template>
