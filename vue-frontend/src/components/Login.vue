@@ -11,7 +11,9 @@ const emit = defineEmits(['loginSuccess']);
 
 const sessionTimeout = ref(props.initialSessionTimeout);
 const toastMessage = ref('');
+
 let countdownInterval = null;
+let lastTimestamp = Date.now(); 
 
 function setSessionCookie(sessionId) {
   document.cookie = `sessionId=${sessionId}; path=/;`;
@@ -30,10 +32,17 @@ const formattedTimeout = computed(() => {
 });
 
 function startSessionCountdown(timeout) {
+  if (countdownInterval) clearInterval(countdownInterval);
+
   sessionTimeout.value = timeout;
+  lastTimestamp = Date.now();
 
   countdownInterval = setInterval(() => {
-    sessionTimeout.value -= 1000;
+    const now = Date.now();
+    const elapsed = lastTimestamp ? now - lastTimestamp : 1000;
+    lastTimestamp = now;
+
+    sessionTimeout.value -= elapsed;
 
     if (sessionTimeout.value <= 0) {
       clearInterval(countdownInterval);
@@ -53,16 +62,40 @@ async function loginUser() {
     });
 
     const sessionId = response.headers['x-session-id'];
+    const newSessionTimeout = response.headers['x-session-timeout'];
 
     if (sessionId) {      
       console.log('Session ID sikeresen beállítva:', sessionId);
       setSessionCookie(sessionId);
       emit('loginSuccess');
+
+      if (newSessionTimeout) {
+        startSessionCountdown(newSessionTimeout);
+      }
     }
 
   } catch (error) {
     console.error('Bejelentkezési hiba:', error);
     showToast('Sikertelen bejelentkezés. Kérjük, ellenőrizze a felhasználónevet és jelszót.');
+  }
+}
+
+async function logoutUser() {
+  try {
+    await axios.post('http://localhost:3000/api/logout', {}, {
+      withCredentials: true,
+      headers: {
+        'x-session-id': document.cookie.replace(/(?:(?:^|.*;\s*)sessionId\s*=\s*([^;]*).*$)|^.*$/, "$1")
+      }
+    });
+
+    document.cookie = 'sessionId=; max-age=0; path=/;';
+    emit('loginSuccess');
+    showToast('Sikeres kijelentkezés.');
+
+  } catch (error) {
+    console.error('Kijelentkezési hiba:', error);
+    showToast('Sikertelen kijelentkezés. Kérjük, próbálja újra.');
   }
 }
 
@@ -80,6 +113,9 @@ watch(() => props.initialSessionTimeout, (newTimeout) => {
       <h3>Üdvözöllek, {{ user }}!</h3>
       <p>Ez a védett oldal.</p>
       <h4>A munkamenet lejár: {{ formattedTimeout }}</h4>
+      <div onclick="">
+        <button @click="emit('loginSuccess'), logoutUser()">Kijelentkezés</button>
+      </div>
     </div>
 
     <div v-else>
@@ -100,6 +136,7 @@ watch(() => props.initialSessionTimeout, (newTimeout) => {
     <div v-if="toastMessage" class="toast">{{ toastMessage }}</div>
   </div>
 </template>
+
 
 <style scoped>
 .toast {
@@ -139,6 +176,7 @@ input {
 }
 
 button {
+  margin-top: 10px;
   padding: 10px 15px;
   background-color: #4CAF50;
   color: white;

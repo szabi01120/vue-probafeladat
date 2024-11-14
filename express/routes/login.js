@@ -2,59 +2,28 @@ const express = require('express');
 const router = express.Router();
 const hash = require('../services/hash');
 const db = require('../services/dbConnect');
-const crypto = require('crypto');
+const sessionService = require('../services/sessionService');
+const config = require('../config');
 require('dotenv').config();
 
-let userSessions = {};
-let defaultSessionTimeout = 30 * 60 * 1000;
-
-function clearSession(sessionId) {
-    delete userSessions[sessionId];
-}
-
-function checkIpChange(sessionId, ip) {
-    if (userSessions[sessionId].ip !== ip) {
-        clearSession(sessionId);
-        return false;
-    }
-    return true;
-}
-
-function checkSessionExpiration(sessionId) {
-    if (userSessions[sessionId] && userSessions[sessionId].timeout < Date.now()) {
-        clearSession(sessionId);
-        return false;
-    }
-    return true;
-}
-
-function clearExpiredSessions() {
-    for (let sessionId in userSessions) {
-        if (userSessions[sessionId].timeout < Date.now()) {
-            clearSession(sessionId);
-        }
-    }
-}
+setInterval(sessionService.clearExpiredSessions, config.cleanupInterval);
 
 function userLoggedIn(req, res, next) {
     const sessionId = req.headers['x-session-id'];
-    console.log('userSessions from middleware:', userSessions);
+    console.log('sessions from middleware: ', sessionService.userSessions);
 
-    clearExpiredSessions();
+    if (sessionId && sessionService.getSession(sessionId)) {
+        const session = sessionService.getSession(sessionId);
 
-    if (sessionId && userSessions[sessionId]) {
-        if (!checkIpChange(sessionId, req.ip)) {
+        if (!sessionService.checkIpChange(sessionId, req.ip)) {
             return res.status(401).json({ isLoggedIn: false, error: 'IP cím változás történt!' });
         }
-        if (!checkSessionExpiration(sessionId)) {
+        if (!sessionService.checkSessionExpiration(sessionId)) {
             return res.status(401).json({ isLoggedIn: false, error: 'Session lejárt, kérjük jelentkezzen be újra.' });
         }
-        
-        userSessions[sessionId].timeout = Date.now() + (parseInt(process.env.SESSION_TIMEOUT) || defaultSessionTimeout) + 10 * 1000;
+        sessionService.refreshSessionTimeout(sessionId);
 
-        req.session.cookie.maxAge = parseInt(process.env.SESSION_TIMEOUT) || defaultSessionTimeout;
-
-        const remainingTime = userSessions[sessionId].timeout - Date.now();
+        const remainingTime = session.timeout - Date.now();
         res.append('X-Session-Timeout', remainingTime.toString());
         next();
     } else {
@@ -64,7 +33,8 @@ function userLoggedIn(req, res, next) {
 
 router.get('/api/check-auth', userLoggedIn, (req, res) => {
     const sessionId = req.headers['x-session-id'];
-    return res.json({ isLoggedIn: true, username: userSessions[sessionId].username });
+    const session = sessionService.getSession(sessionId);
+    return res.json({ isLoggedIn: true, username: session.username });
 });
 
 router.post('/api/login', (req, res) => {
@@ -79,22 +49,20 @@ router.post('/api/login', (req, res) => {
         }
 
         if (rows.length > 0) {
-            const sessionId = crypto.randomBytes(16).toString('hex');
-
-            userSessions[sessionId] = {
-                accountId: rows[0].accountId, 
-                ip: req.ip,
-                timeout: Date.now() + (parseInt(process.env.SESSION_TIMEOUT) || defaultSessionTimeout),
-                username: username,
-                sessionId: sessionId
-            };
-
+            const sessionId = sessionService.createSession(username, req.ip);
             res.setHeader('X-Session-Id', sessionId);   
+            res.setHeader('X-Session-Timeout', config.sessionTimeout.toString());
             res.json({ isLoggedIn: true, message: 'Sikeres bejelentkezés!' });
         } else {
             res.status(401).json({ isLoggedIn: false, error: 'Hibás felhasználónév vagy jelszó!' });
         }
     });
+});
+
+router.post('/api/logout', userLoggedIn, (req, res) => {
+    const sessionId = req.headers['x-session-id'];
+    sessionService.clearSession(sessionId);
+    res.json({ isLoggedIn: false, message: 'Sikeres kijelentkezés!' });
 });
 
 module.exports = { router, userLoggedIn };

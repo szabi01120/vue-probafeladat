@@ -3,13 +3,11 @@ const cors = require('cors');
 const login = require('./routes/login');
 const users = require('./routes/users');
 const cookieParser = require('cookie-parser');
-const sessionMiddleware = require('./routes/sessionConfig');
 require('dotenv').config();
 
 const app = express();
 const port = process.env.PORT || 3000;
 
-app.use(sessionMiddleware);
 app.use(cookieParser());
 
 app.use(express.json());

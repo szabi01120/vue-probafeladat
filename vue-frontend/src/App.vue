@@ -49,7 +49,6 @@ onMounted(() => {
   </header>
 
   <main>
-    <!-- Login komponensnél figyeljük a bejelentkezési eseményt -->
     <Login :isLoggedIn="isLoggedIn" :user="user" :initialSessionTimeout="initialSessionTimeout" @loginSuccess="checkAuth" />
   </main>
 </template>
