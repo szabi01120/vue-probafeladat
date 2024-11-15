@@ -4,6 +4,8 @@ import axios from 'axios';
 
 const username = ref('');
 const password = ref('');
+const twoFactorCode = ref('');
+const is2FaRequired = ref(false);
 
 // Props és események
 const props = defineProps(['isLoggedIn', 'user', 'initialSessionTimeout']);
@@ -13,10 +15,18 @@ const sessionTimeout = ref(props.initialSessionTimeout);
 const toastMessage = ref('');
 
 let countdownInterval = null;
-let lastTimestamp = Date.now(); 
+let lastTimestamp = Date.now();
+
+function getSessionCookie() {
+  return document.cookie.replace(/(?:(?:^|.*;\s*)sessionId\s*=\s*([^;]*).*$)|^.*$/, "$1");
+}
 
 function setSessionCookie(sessionId) {
   document.cookie = `sessionId=${sessionId}; path=/;`;
+}
+
+function deleteSessionCookie() {
+  document.cookie = 'sessionId=; max-age=0; path=/;';
 }
 
 function showToast(message) {
@@ -62,16 +72,12 @@ async function loginUser() {
     });
 
     const sessionId = response.headers['x-session-id'];
-    const newSessionTimeout = response.headers['x-session-timeout'];
 
-    if (sessionId) {      
+    if (sessionId && response.status === 200 && !response.data.isLoggedIn) {
       console.log('Session ID sikeresen beállítva:', sessionId);
+      is2FaRequired.value = true;
       setSessionCookie(sessionId);
-      emit('loginSuccess');
-
-      if (newSessionTimeout) {
-        startSessionCountdown(newSessionTimeout);
-      }
+      showToast('Kétfaktoros kód elküldve az e-mail címére.');
     }
 
   } catch (error) {
@@ -80,16 +86,41 @@ async function loginUser() {
   }
 }
 
+async function verifyTwoFactorCode() {
+  try {
+    const sessionId = getSessionCookie();
+    const response = await axios.post('http://localhost:3000/api/verify-2fa', {
+      twoFactorCode: twoFactorCode.value
+    }, {
+      withCredentials: true,
+      headers: {
+        'x-session-id': sessionId
+      }
+    });
+
+    if (response.status === 200 && response.data.isLoggedIn) {
+      is2FaRequired.value = false;
+      startSessionCountdown(response.headers['x-session-timeout']);
+      emit('loginSuccess');
+      showToast('Sikeres bejelentkezés.');
+    }
+  } catch (error) {
+    console.error('Kétfaktoros hitelesítési hiba:', error);
+    showToast('Sikertelen bejelentkezés. Kérjük, próbálja újra.');
+  }
+}
+
 async function logoutUser() {
   try {
     await axios.post('http://localhost:3000/api/logout', {}, {
       withCredentials: true,
       headers: {
-        'x-session-id': document.cookie.replace(/(?:(?:^|.*;\s*)sessionId\s*=\s*([^;]*).*$)|^.*$/, "$1")
+        'x-session-id': getSessionCookie()
       }
     });
 
-    document.cookie = 'sessionId=; max-age=0; path=/;';
+    deleteSessionCookie();
+    clearInterval(countdownInterval);
     emit('loginSuccess');
     showToast('Sikeres kijelentkezés.');
 
@@ -100,9 +131,7 @@ async function logoutUser() {
 }
 
 watch(() => props.initialSessionTimeout, (newTimeout) => {
-  if (newTimeout) {
-    startSessionCountdown(newTimeout);
-  }
+  startSessionCountdown(newTimeout);
 });
 </script>
 
@@ -120,7 +149,7 @@ watch(() => props.initialSessionTimeout, (newTimeout) => {
 
     <div v-else>
       <h1>Bejelentkezés</h1>
-      <form @submit.prevent="loginUser">
+      <form v-if="!is2FaRequired" @submit.prevent="loginUser">
         <div>
           <label for="username">Felhasználónév</label>
           <input v-model="username" type="text" id="username" required />
@@ -129,8 +158,17 @@ watch(() => props.initialSessionTimeout, (newTimeout) => {
           <label for="password">Jelszó</label>
           <input v-model="password" type="password" id="password" required />
         </div>
-        <button type="submit">Bejelentkezés</button>
+        <button v-if="!is2FaRequired" type="submit">Bejelentkezés</button>
       </form>
+
+      <div v-if="is2FaRequired">
+        <h2>Adja meg a kétfaktoros kódot</h2>
+        <div>
+          <label for="2fa">Kétfaktoros kód</label>
+          <input v-model="twoFactorCode" type="text" id="2fa" required />
+        </div>
+        <button @click="verifyTwoFactorCode">Küldés</button>
+      </div>
     </div>
 
     <div v-if="toastMessage" class="toast">{{ toastMessage }}</div>
@@ -152,8 +190,15 @@ watch(() => props.initialSessionTimeout, (newTimeout) => {
 }
 
 @keyframes fadeInOut {
-  0%, 100% { opacity: 0; }
-  10%, 90% { opacity: 1; }
+  0%,
+  100% {
+    opacity: 0;
+  }
+
+  10%,
+  90% {
+    opacity: 1;
+  }
 }
 
 .login {

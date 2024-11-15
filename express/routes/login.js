@@ -1,5 +1,7 @@
 const express = require('express');
 const router = express.Router();
+const nodemailer = require('nodemailer');
+const crypto = require('crypto');
 const hash = require('../services/hash');
 const db = require('../services/dbConnect');
 const sessionService = require('../services/sessionService');
@@ -8,32 +10,48 @@ require('dotenv').config();
 
 setInterval(sessionService.clearExpiredSessions, config.cleanupInterval);
 
+const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+        user: process.env.EMAIL_USER,
+        pass: process.env.EMAIL_PASS,
+    },
+});
+
+function generate2FACode() {
+    return crypto.randomInt(100000, 999999).toString();
+}
+
 function userLoggedIn(req, res, next) {
     const sessionId = req.headers['x-session-id'];
-    console.log('sessions from middleware: ', sessionService.userSessions);
+    const session = sessionService.getSession(sessionId);
 
-    if (sessionId && sessionService.getSession(sessionId)) {
-        const session = sessionService.getSession(sessionId);
-
-        if (!sessionService.checkIpChange(sessionId, req.ip)) {
-            return res.status(401).json({ isLoggedIn: false, error: 'IP cím változás történt!' });
-        }
-        if (!sessionService.checkSessionExpiration(sessionId)) {
-            return res.status(401).json({ isLoggedIn: false, error: 'Session lejárt, kérjük jelentkezzen be újra.' });
-        }
-        sessionService.refreshSessionTimeout(sessionId);
-
-        const remainingTime = session.timeout - Date.now();
-        res.append('X-Session-Timeout', remainingTime.toString());
-        next();
-    } else {
-        return res.status(401).json({ isLoggedIn: false, error: 'Kérjük jelentkezzen be!' });
+    if (!session) {
+        return res.status(401).json({ isLoggedIn: false, error: 'Kérjük jeletkezzen be!' });
     }
+    
+    if (!sessionService.checkIpChange(sessionId, req.ip)) {
+        return res.status(401).json({ isLoggedIn: false, error: 'IP cím változás történt!' });
+    }
+
+    if (!sessionService.checkSessionExpiration(sessionId)) {
+        return res.status(401).json({ isLoggedIn: false, error: 'Session lejárt, kérjük jelentkezzen be újra.' });
+    }
+
+    if (session.user2FA && !session.user2FAVerified) {
+        return res.status(401).json({ isLoggedIn: false, error: 'Kétlépcsős azonosítás szükséges!' });
+    }
+
+    sessionService.refreshSessionTimeout(sessionId);
+    const remainingTime = session.timeout - Date.now();
+    res.append('X-Session-Timeout', remainingTime.toString());
+    next();
 }
 
 router.get('/api/check-auth', userLoggedIn, (req, res) => {
     const sessionId = req.headers['x-session-id'];
     const session = sessionService.getSession(sessionId);
+
     return res.json({ isLoggedIn: true, username: session.username });
 });
 
@@ -42,21 +60,49 @@ router.post('/api/login', (req, res) => {
     const hashedPass = hash.hashedPW(username, password);
 
     const query = 'SELECT * FROM users WHERE username = ? AND password = ?';
-    db.query(query, [username, hashedPass], (err, rows) => {
+    db.query(query, [username, hashedPass], async (err, rows) => {
         if (err) {
             console.error('Hiba a lekérdezés során!', err);
             return res.status(500).json({ error: 'Sikertelen bejelentkezés' });
         }
 
         if (rows.length > 0) {
-            const sessionId = sessionService.createSession(username, req.ip);
-            res.setHeader('X-Session-Id', sessionId);   
-            res.setHeader('X-Session-Timeout', config.sessionTimeout.toString());
-            res.json({ isLoggedIn: true, message: 'Sikeres bejelentkezés!' });
+            const userEmail = rows[0].email;
+            const twoFactorCode = generate2FACode();
+
+            try {
+                await transporter.sendMail({
+                    from: process.env.EMAIL_USER,
+                    to: userEmail,
+                    subject: 'Kétlépcsős azonosítás',
+                    text: `A kétlépcsős azonosításhoz használja a következő kódot: ${twoFactorCode}`,
+                });
+            } catch (error) {
+                console.error('Hiba az email küldése során!', error);
+                return res.status(500).json({ error: 'Sikertelen 2FA kód küldés.' });
+            }
+            
+            const sessionId = sessionService.createSession(username, req.ip, twoFactorCode);
+            console.log('sessions from login: ', sessionService.getSession(sessionId));
+            res.setHeader('X-Session-Id', sessionId);
+            res.status(200).json({ isLoggedIn: false, message: 'Kétfaktoros kód elküldve az email címre!' });
         } else {
             res.status(401).json({ isLoggedIn: false, error: 'Hibás felhasználónév vagy jelszó!' });
         }
     });
+});
+
+router.post('/api/verify-2fa', (req, res) => {
+    const sessionId = req.headers['x-session-id'];
+    const twoFactorCode = req.body.twoFactorCode;
+
+    if (sessionService.verifyTwoFactorCode(sessionId, twoFactorCode)) {
+        res.setHeader('X-Session-Timeout', config.sessionTimeout.toString());
+        sessionService.refreshSessionTimeout(sessionId);
+        res.status(200).json({ isLoggedIn: true, message: 'Sikeres kétlépcsős azonosítás!' });
+    } else {
+        res.status(401).json({ isLoggedIn: false, error: 'Hibás 2FA kód!' });
+    }
 });
 
 router.post('/api/logout', userLoggedIn, (req, res) => {

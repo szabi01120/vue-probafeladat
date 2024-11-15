@@ -1,17 +1,45 @@
 const crypto = require('crypto');
 const config = require('../config');
+const bcrypt = require('bcrypt');
 
 const userSessions = {};
+const defaultSessionTimeout = config.sessionTimeout || 10 * 60 * 1000;
 
-function createSession(username, ip) {
+function createSession(username, ip, user2FA) {
     const sessionId = crypto.randomBytes(16).toString('hex');
     userSessions[sessionId] = {
         username: username,
         ip: ip,
-        timeout: Date.now() + config.sessionTimeout,
+        timeout: Date.now() + defaultSessionTimeout,
         sessionId: sessionId,
+        user2FA: user2FA,
+        user2FAVerified: false,
     };
     return sessionId;
+}
+
+function setTwoFactorCode(sessionId, twoFactorCode) {
+    if (userSessions[sessionId]) {
+        const hashed2FA = bcrypt.hashSync(twoFactorCode, 10);
+        userSessions[sessionId].user2FA = hashed2FA;
+        userSessions[sessionId].user2FAVerified = false;
+    }
+}
+
+function verifyTwoFactorCode(sessionId, code) {
+    const session = userSessions[sessionId];
+    if (!session) return false;
+
+    const isCodeValid =
+        session.user2FA &&
+        bcrypt.compareSync(code, session.user2FA) &&
+        session.timeout > Date.now();
+
+    if (isCodeValid) {
+        session.user2FAVerified = true;
+        return true;
+    }
+    return false;
 }
 
 function clearSession(sessionId) {
@@ -36,7 +64,7 @@ function checkSessionExpiration(sessionId) {
 
 function refreshSessionTimeout(sessionId) {
     if (userSessions[sessionId]) {
-        userSessions[sessionId].timeout = Date.now() + config.sessionTimeout;
+        userSessions[sessionId].timeout = Date.now() + defaultSessionTimeout;
     }
 }
 
@@ -52,6 +80,14 @@ function getSession(sessionId) {
     return userSessions[sessionId];
 }
 
+
+
+
+
+function isTwoFactorVerified(sessionId) {
+    return userSessions[sessionId]?.user2FAVerified || false;
+}
+
 module.exports = {
     createSession,
     clearSession,
@@ -60,5 +96,8 @@ module.exports = {
     refreshSessionTimeout,
     clearExpiredSessions,
     getSession,
+    setTwoFactorCode,
+    verifyTwoFactorCode,
+    isTwoFactorVerified,
     userSessions
 };
