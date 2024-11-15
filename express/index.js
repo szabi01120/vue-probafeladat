@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const register = require('./routes/register');
 const login = require('./routes/login');
 const users = require('./routes/users');
 const cookieParser = require('cookie-parser');
@@ -14,10 +15,12 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 app.use(cors({
-  origin: 'http://127.0.0.1:5173',
+  origin: 'http://localhost:5173',
   credentials: true,
   exposedHeaders: ['X-Session-Id', 'X-Session-Timeout']
 }));
+
+app.use(register);
 
 app.use(login.router);
 app.use(users);

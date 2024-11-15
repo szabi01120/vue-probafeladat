@@ -26,31 +26,33 @@ function userLoggedIn(req, res, next) {
     const sessionId = req.headers['x-session-id'];
     const session = sessionService.getSession(sessionId);
 
+    console.log('sessions: ', sessionService.userSessions);
+
     if (!session) {
-        return res.status(401).json({ isLoggedIn: false, error: 'Kérjük jeletkezzen be!' });
+        return res.status(401).json({ isLoggedIn: false, message: 'Kérjük jeletkezz be!' });
     }
     
     if (!sessionService.checkIpChange(sessionId, req.ip)) {
-        return res.status(401).json({ isLoggedIn: false, error: 'IP cím változás történt!' });
+        return res.status(401).json({ isLoggedIn: false, message: 'IP cím változás történt!' });
     }
 
     if (!sessionService.checkSessionExpiration(sessionId)) {
-        return res.status(401).json({ isLoggedIn: false, error: 'Session lejárt, kérjük jelentkezzen be újra.' });
+        return res.status(401).json({ isLoggedIn: false, message: 'Session lejárt, kérjük jelentkezz be újra.' });
     }
 
     if (session.user2FA && !session.user2FAVerified) {
-        return res.status(401).json({ isLoggedIn: false, error: 'Kétlépcsős azonosítás szükséges!' });
+        return res.status(401).json({ isLoggedIn: false, message: 'Kétlépcsős azonosítás szükséges!' });
     }
-
-    sessionService.refreshSessionTimeout(sessionId);
-    const remainingTime = session.timeout - Date.now();
-    res.append('X-Session-Timeout', remainingTime.toString());
     next();
 }
 
 router.get('/api/check-auth', userLoggedIn, (req, res) => {
     const sessionId = req.headers['x-session-id'];
     const session = sessionService.getSession(sessionId);
+
+    sessionService.refreshSessionTimeout(sessionId);
+    const remainingTime = session.timeout - Date.now();
+    res.append('X-Session-Timeout', remainingTime.toString());
 
     return res.json({ isLoggedIn: true, username: session.username });
 });
@@ -63,7 +65,7 @@ router.post('/api/login', (req, res) => {
     db.query(query, [username, hashedPass], async (err, rows) => {
         if (err) {
             console.error('Hiba a lekérdezés során!', err);
-            return res.status(500).json({ error: 'Sikertelen bejelentkezés' });
+            return res.status(500).json({ message: 'Sikertelen bejelentkezés' });
         }
 
         if (rows.length > 0) {
@@ -79,15 +81,17 @@ router.post('/api/login', (req, res) => {
                 });
             } catch (error) {
                 console.error('Hiba az email küldése során!', error);
-                return res.status(500).json({ error: 'Sikertelen 2FA kód küldés.' });
+                return res.status(500).json({ message: 'Sikertelen 2FA kód küldés.' });
             }
             
-            const sessionId = sessionService.createSession(username, req.ip, twoFactorCode);
+            const sessionId = sessionService.createSession(username, req.ip);
+            sessionService.setTwoFactorCode(sessionId, twoFactorCode);
+            
             console.log('sessions from login: ', sessionService.getSession(sessionId));
             res.setHeader('X-Session-Id', sessionId);
             res.status(200).json({ isLoggedIn: false, message: 'Kétfaktoros kód elküldve az email címre!' });
         } else {
-            res.status(401).json({ isLoggedIn: false, error: 'Hibás felhasználónév vagy jelszó!' });
+            res.status(401).json({ isLoggedIn: false, message: 'Hibás felhasználónév vagy jelszó!' });
         }
     });
 });
@@ -101,7 +105,7 @@ router.post('/api/verify-2fa', (req, res) => {
         sessionService.refreshSessionTimeout(sessionId);
         res.status(200).json({ isLoggedIn: true, message: 'Sikeres kétlépcsős azonosítás!' });
     } else {
-        res.status(401).json({ isLoggedIn: false, error: 'Hibás 2FA kód!' });
+        res.status(401).json({ isLoggedIn: false, message: 'Hibás 2FA kód!' });
     }
 });
 

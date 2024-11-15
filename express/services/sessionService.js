@@ -12,8 +12,8 @@ function createSession(username, ip, user2FA) {
         ip: ip,
         timeout: Date.now() + defaultSessionTimeout,
         sessionId: sessionId,
-        user2FA: user2FA,
         user2FAVerified: false,
+        twoFactorExpires: null,
     };
     return sessionId;
 }
@@ -22,7 +22,10 @@ function setTwoFactorCode(sessionId, twoFactorCode) {
     if (userSessions[sessionId]) {
         const hashed2FA = bcrypt.hashSync(twoFactorCode, 10);
         userSessions[sessionId].user2FA = hashed2FA;
-        userSessions[sessionId].user2FAVerified = false;
+        userSessions[sessionId].twoFactorExpires = Date.now() + config.twoFactorTimeout;
+    }
+    else {
+        throw new Error('Nincs munkamenet!');
     }
 }
 
@@ -30,12 +33,15 @@ function verifyTwoFactorCode(sessionId, code) {
     const session = userSessions[sessionId];
     if (!session) return false;
 
-    const isCodeValid =
-        session.user2FA &&
-        bcrypt.compareSync(code, session.user2FA) &&
-        session.timeout > Date.now();
+    const isExpired = session.twoFactorExpires && session.twoFactorExpires < Date.now();
+    const isValidCode = session.user2FA && bcrypt.compareSync(code, session.user2FA);
 
-    if (isCodeValid) {
+    if (isExpired) {
+        clearSession(sessionId);
+        return false;
+    }
+
+    if (isValidCode) {
         session.user2FAVerified = true;
         return true;
     }
@@ -80,10 +86,6 @@ function getSession(sessionId) {
     return userSessions[sessionId];
 }
 
-
-
-
-
 function isTwoFactorVerified(sessionId) {
     return userSessions[sessionId]?.user2FAVerified || false;
 }
@@ -99,5 +101,5 @@ module.exports = {
     setTwoFactorCode,
     verifyTwoFactorCode,
     isTwoFactorVerified,
-    userSessions
+    userSessions,
 };

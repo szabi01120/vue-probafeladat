@@ -22,3 +22,5 @@ app.post('/api/register', (req, res) => {
         }
     });
 });
+
+module.exports = app
