@@ -1,26 +1,13 @@
 const express = require('express');
 const router = express.Router();
-const nodemailer = require('nodemailer');
-const crypto = require('crypto');
 const hash = require('../services/hash');
+const emailService = require('../services/emailService');
 const db = require('../services/dbConnect');
 const sessionService = require('../services/sessionService');
+const twoFactorService = require('../services/twoFactorService');
 const config = require('../config');
-require('dotenv').config();
 
 setInterval(sessionService.clearExpiredSessions, config.cleanupInterval);
-
-const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-    },
-});
-
-function generate2FACode() {
-    return crypto.randomInt(100000, 999999).toString();
-}
 
 function userLoggedIn(req, res, next) {
     const sessionId = req.headers['x-session-id'];
@@ -70,22 +57,12 @@ router.post('/api/login', (req, res) => {
 
         if (rows.length > 0) {
             const userEmail = rows[0].email;
-            const twoFactorCode = generate2FACode();
+            const twoFactorCode = twoFactorService.generate2FACode();
 
-            try {
-                await transporter.sendMail({
-                    from: process.env.EMAIL_USER,
-                    to: userEmail,
-                    subject: 'Kétlépcsős azonosítás',
-                    text: `A kétlépcsős azonosításhoz használja a következő kódot: ${twoFactorCode}`,
-                });
-            } catch (error) {
-                console.error('Hiba az email küldése során!', error);
-                return res.status(500).json({ message: 'Sikertelen 2FA kód küldés.' });
-            }
+            await emailService.sendTwoFactorEmail(userEmail, twoFactorCode);
             
             const sessionId = sessionService.createSession(username, req.ip);
-            sessionService.setTwoFactorCode(sessionId, twoFactorCode);
+            twoFactorService.setTwoFactorCode(sessionId, twoFactorCode);
             
             console.log('sessions from login: ', sessionService.getSession(sessionId));
             res.setHeader('X-Session-Id', sessionId);
@@ -100,7 +77,7 @@ router.post('/api/verify-2fa', (req, res) => {
     const sessionId = req.headers['x-session-id'];
     const twoFactorCode = req.body.twoFactorCode;
 
-    if (sessionService.verifyTwoFactorCode(sessionId, twoFactorCode)) {
+    if (twoFactorService.verifyTwoFactorCode(sessionId, twoFactorCode)) {
         res.setHeader('X-Session-Timeout', config.sessionTimeout.toString());
         sessionService.refreshSessionTimeout(sessionId);
         res.status(200).json({ isLoggedIn: true, message: 'Sikeres kétlépcsős azonosítás!' });

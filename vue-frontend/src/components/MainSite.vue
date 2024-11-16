@@ -1,113 +1,40 @@
 <script setup>
-import { ref, computed, watch } from 'vue';
+import { ref, watch } from 'vue';
 import axios from 'axios';
-
-const username = ref('');
-const password = ref('');
-const twoFactorCode = ref('');
-const is2FaRequired = ref(false);
+import cookieUtils from '../utils/cookieUtils';
+import startSessionCountdown from '../utils/countdownUtil';
+import formatTimeout from '@/utils/timeUtils';
 
 // Props és események
 const props = defineProps(['isLoggedIn', 'user', 'initialSessionTimeout']);
-const emit = defineEmits(['loginSuccess']);
+const emit = defineEmits(['loginSuccess', 'is2FaRequired']);
 
 const sessionTimeout = ref(props.initialSessionTimeout);
 const toastMessage = ref('');
 
 let countdownInterval = null;
-let lastTimestamp = Date.now();
-
-function getSessionCookie() {
-  return document.cookie.replace(/(?:(?:^|.*;\s*)sessionId\s*=\s*([^;]*).*$)|^.*$/, "$1");
-}
-
-function setSessionCookie(sessionId) {
-  document.cookie = `sessionId=${sessionId}; path=/;`;
-}
-
-function deleteSessionCookie() {
-  document.cookie = 'sessionId=; max-age=0; path=/;';
-}
+let countdownController = null;
 
 function showToast(message) {
   toastMessage.value = message;
   setTimeout(() => toastMessage.value = '', 3000); // 3 másodperc
 }
 
-const formattedTimeout = computed(() => {
-  const totalSeconds = Math.floor(sessionTimeout.value / 1000);
-  const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
-  const seconds = String(totalSeconds % 60).padStart(2, '0');
-  return `${minutes}:${seconds}`;
-});
-
-function startSessionCountdown(timeout) {
-  if (countdownInterval) clearInterval(countdownInterval);
+function startCountdown(timeout) {
+  console.log('Munkamenet kezdete:', timeout);
+  countdownController = startSessionCountdown(timeout, () => {
+    emit('loginSuccess');
+    showToast('A munkamenet lejárt. Kérjük, jelentkezzen be újra.');
+  });
 
   sessionTimeout.value = timeout;
-  lastTimestamp = Date.now();
 
-  countdownInterval = setInterval(() => {
-    const now = Date.now();
-    const elapsed = lastTimestamp ? now - lastTimestamp : 1000;
-    lastTimestamp = now;
-
-    sessionTimeout.value -= elapsed;
-
+  const interval = setInterval(() => {
+    sessionTimeout.value = countdownController.getRemainingTime();
     if (sessionTimeout.value <= 0) {
-      clearInterval(countdownInterval);
-      showToast('A munkamenet lejárt. Kérjük, jelentkezzen be újra.');
-      emit('loginSuccess');
+      clearInterval(interval);
     }
   }, 1000);
-}
-
-async function loginUser() {
-  try {
-    const response = await axios.post('http://localhost:3000/api/login', {
-      username: username.value,
-      password: password.value
-    }, {
-      withCredentials: true
-    });
-
-    const sessionId = response.headers['x-session-id'];
-
-    if (sessionId && response.status === 200 && !response.data.isLoggedIn) {
-      console.log('Session ID sikeresen beállítva:', sessionId);
-      is2FaRequired.value = true;
-      setSessionCookie(sessionId);
-      showToast('Kétfaktoros kód elküldve az e-mail címére.');
-    }
-
-  } catch (error) {
-    console.error('Bejelentkezési hiba:', error);
-    showToast('Sikertelen bejelentkezés. Kérjük, ellenőrizze a felhasználónevet és jelszót.');
-  }
-}
-
-async function verifyTwoFactorCode() {
-  try {
-    const sessionId = getSessionCookie();
-    const response = await axios.post('http://localhost:3000/api/verify-2fa', {
-      twoFactorCode: twoFactorCode.value
-    }, {
-      withCredentials: true,
-      headers: {
-        'x-session-id': sessionId
-      }
-    });
-
-    if (response.status === 200 && response.data.isLoggedIn) {
-      is2FaRequired.value = false;
-      startSessionCountdown(response.headers['x-session-timeout']);
-      emit('loginSuccess');
-      showToast('Sikeres bejelentkezés.');
-    }
-  } catch (error) {
-    console.error('Kétfaktoros hitelesítési hiba:', error);
-    showToast('Sikertelen bejelentkezés. Kérjük, próbálja újra.');
-  }
 }
 
 async function logoutUser() {
@@ -115,62 +42,40 @@ async function logoutUser() {
     await axios.post('http://localhost:3000/api/logout', {}, {
       withCredentials: true,
       headers: {
-        'x-session-id': getSessionCookie()
+        'x-session-id': cookieUtils.getSessionCookie()
       }
     });
 
-    deleteSessionCookie();
+    cookieUtils.deleteSessionCookie();
     clearInterval(countdownInterval);
     emit('loginSuccess');
     showToast('Sikeres kijelentkezés.');
 
   } catch (error) {
-    console.error('Kijelentkezési hiba:', error);
     showToast('Sikertelen kijelentkezés. Kérjük, próbálja újra.');
   }
 }
 
-watch(() => props.initialSessionTimeout, (newTimeout) => {
-  startSessionCountdown(newTimeout);
+watch(() => props.isLoggedIn, (newValue) => {
+  console.log('isLoggedIn változás:', newValue);
+  if (newValue) {
+    startCountdown(props.initialSessionTimeout);
+  } else {
+    clearInterval(countdownInterval);
+  }
 });
+
 </script>
 
 <template>
   <div class="login">
-    <div v-if="isLoggedIn">
       <h1>BELÉPTÉL!</h1>
       <h3>Üdvözöllek, {{ user }}!</h3>
       <p>Ez a védett oldal.</p>
-      <h4>A munkamenet lejár: {{ formattedTimeout }}</h4>
+      <h4>A munkamenet lejár: {{ formatTimeout(sessionTimeout) }}</h4>
       <div onclick="">
         <button @click="emit('loginSuccess'), logoutUser()">Kijelentkezés</button>
       </div>
-    </div>
-
-    <div v-else>
-      <h1>Bejelentkezés</h1>
-      <form v-if="!is2FaRequired" @submit.prevent="loginUser">
-        <div>
-          <label for="username">Felhasználónév</label>
-          <input v-model="username" type="text" id="username" required />
-        </div>
-        <div>
-          <label for="password">Jelszó</label>
-          <input v-model="password" type="password" id="password" required />
-        </div>
-        <button v-if="!is2FaRequired" type="submit">Bejelentkezés</button>
-      </form>
-
-      <div v-if="is2FaRequired">
-        <h2>Adja meg a kétfaktoros kódot</h2>
-        <div>
-          <label for="2fa">Kétfaktoros kód</label>
-          <input v-model="twoFactorCode" type="text" id="2fa" required />
-        </div>
-        <button @click="verifyTwoFactorCode">Küldés</button>
-      </div>
-    </div>
-
     <div v-if="toastMessage" class="toast">{{ toastMessage }}</div>
   </div>
 </template>

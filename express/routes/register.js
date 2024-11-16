@@ -1,14 +1,11 @@
 const express = require('express')
-const { createHash } = require('crypto')
 const db = require('../services/dbConnect')
 const hash = require('../services/hash')
-
-const app = express()
+const router = express.Router()
 
 const query = 'INSERT INTO users (username, password, serial, characterName, email) VALUES (?, ?, ?, ?, ?)';
 
-//register endpoint
-app.post('/api/register', (req, res) => {
+router.post('/api/register', (req, res) => {
     const { username, password, serial, characterName, email } = req.body;
     const hashedPass = hash.hashedPW(username, password);
     
@@ -23,4 +20,4 @@ app.post('/api/register', (req, res) => {
     });
 });
 
-module.exports = app
+module.exports = router
