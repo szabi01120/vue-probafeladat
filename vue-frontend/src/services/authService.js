@@ -43,23 +43,27 @@ export async function loginUser(username, password) {
             message: response.data.message || null
         };
     } catch (error) {
-        throw new Error(error.response?.data?.message || 'Szerverhiba történt.');
+        throw new Error(error.response?.data?.message || 'Hiba történt a bejelentkezés során.');
     }
 }
 
 export async function verifyTwoFactorCode(twoFactorCode) {
     const sessionId = cookieUtils.getSessionCookie();
 
-    const response = await axios.post(
+    try {
+        const response = await axios.post(
         `${API_URL}/api/verify-2fa`,
-        { twoFactorCode },
-        {
-            withCredentials: true,
-            headers: {
-                'x-session-id': sessionId
+            { twoFactorCode },
+            {
+                withCredentials: true,
+                headers: {
+                    'x-session-id': sessionId
+                }
             }
-        }
-    );
+        );
+    } catch (error) {
+        throw new Error(error.response?.data?.message || 'Hiba történt a kétlépcsős azonosítás során.');
+    }
 
     return response;
 }
@@ -78,7 +82,6 @@ export async function logoutUser() {
         cookieUtils.deleteSessionCookie();
         return response;
     } catch (error) {
-        console.error('Hiba történt a kijelentkezés során!', error);
-        throw error;
+        throw new Error(error.response?.data?.message || 'Hiba történt a kijelentkezés során.');
     }
 }
