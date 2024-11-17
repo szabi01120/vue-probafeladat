@@ -4,15 +4,7 @@ const config = require('../config');
 const userSessions = {};
 const defaultSessionTimeout = config.sessionTimeout || 10 * 60 * 1000;
 
-function getSession(sessionId) {
-    return userSessions[sessionId];
-}
-
-function clearSession(sessionId) {
-    delete userSessions[sessionId];
-}
-
-function createSession(username, ip, user2FA) {
+function createSession(username, ip) {
     const sessionId = crypto.randomBytes(16).toString('hex');
     userSessions[sessionId] = {
         username: username,
@@ -23,6 +15,14 @@ function createSession(username, ip, user2FA) {
         twoFactorExpires: null,
     };
     return sessionId;
+}
+
+function getSession(sessionId) {
+    return userSessions[sessionId];
+}
+
+function clearSession(sessionId) {
+    delete userSessions[sessionId];
 }
 
 function checkIpChange(sessionId, ip) {

@@ -1,29 +1,30 @@
 <script setup>
 import { ref, defineEmits } from 'vue';
-import cookieUtils from '@/utils/cookieUtils';
 import startCountdown from '@/utils/countdownUtil';
-import axios from 'axios';
-
-const API_URL = import.meta.env.VITE_API_URL;
+import { verifyTwoFactorCode } from '@/services/authService';
 
 const emit = defineEmits(['is2FaRequired', 'loginSuccess', 'showToast']);
 
 const twoFactorCode = ref('');
+const isLoading = ref(false);
 
-async function verifyTwoFactorCode() {
+function validateTwoFactorCode() {
+    const isValid = /^[0-9]{6}$/.test(twoFactorCode.value);
+    if (!isValid) {
+        emit('showToast', 'A kétfaktoros kódnak 6 számjegyűnek kell lennie.');
+        return false;
+    }
+    return true;
+}
+
+async function handleVerifyTwoFactorCode() {
+  if (!validateTwoFactorCode()) return;
+
+  isLoading.value = true;
   try {
-    const sessionId = cookieUtils.getSessionCookie();
-    const response = await axios.post(`${API_URL}/api/verify-2fa`, {
-      twoFactorCode: twoFactorCode.value
-    }, {
-      withCredentials: true,
-      headers: {
-        'x-session-id': sessionId
-      }
-    });
+    const response = await verifyTwoFactorCode(twoFactorCode.value);
 
     if (response.status === 200 && response.data.isLoggedIn) {
-      console.log(response.data);
       startCountdown(response.headers['x-session-timeout']);
       emit('is2FaRequired');
       emit('loginSuccess');
@@ -32,6 +33,8 @@ async function verifyTwoFactorCode() {
   } catch (error) {
     console.error('Hiba a kétfaktoros kód ellenőrzésekor:', error);
     emit('showToast', 'Hiba a kétfaktoros kód ellenőrzésekor.');
+  } finally {
+    isLoading.value = false;
   }
 }
 </script>
@@ -44,7 +47,10 @@ async function verifyTwoFactorCode() {
             <label for="2fa">Kétfaktoros kód</label>
             <input v-model="twoFactorCode" type="text" id="2fa" required />
             </div>
-            <button @click="verifyTwoFactorCode">Küldés</button>
+            <button @click="handleVerifyTwoFactorCode" :disabled="isLoading">
+              <span v-if="isLoading">Betöltés...</span>
+              <span v-else>Küldés</span>
+            </button>
         </div>
     </div>
 </template>

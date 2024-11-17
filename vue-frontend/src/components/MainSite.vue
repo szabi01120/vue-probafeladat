@@ -4,6 +4,7 @@ import axios from 'axios';
 import cookieUtils from '../utils/cookieUtils';
 import startSessionCountdown from '../utils/countdownUtil';
 import formatTimeout from '@/utils/timeUtils';
+import { logoutUser } from '@/services/authService';
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -29,23 +30,22 @@ function startCountdown(timeout) {
     sessionTimeout.value = countdownController.getRemainingTime();
     if (sessionTimeout.value <= 0) {
       clearInterval(countdownInterval);
+      cookieUtils.deleteSessionCookie();
+      emit('loginSuccess');
     }
   }, 1000);
 }
 
-async function logoutUser() {
+async function handleLogoutUser() {
   try {
-    await axios.post(`${API_URL}/api/logout`, {}, {
-      withCredentials: true,
-      headers: {
-        'x-session-id': cookieUtils.getSessionCookie()
-      }
-    });
+    const response = await logoutUser();
 
-    cookieUtils.deleteSessionCookie();
-    clearInterval(countdownInterval);
-    emit('loginSuccess');
-    emit('showToast', 'Sikeres kijelentkezés.');
+    if (response.status === 200) {
+      cookieUtils.deleteSessionCookie();
+      clearInterval(countdownInterval);
+      emit('loginSuccess');
+      emit('showToast', 'Sikeres kijelentkezés.');
+    }
 
   } catch (error) {
     console.error('Hiba a kijelentkezés során:', error);
@@ -67,7 +67,7 @@ onMounted(() => {
       <p>Ez a védett oldal.</p>
       <h4>A munkamenet lejár: {{ formatTimeout(sessionTimeout) }}</h4>
       <div onclick="">
-        <button @click="emit('loginSuccess'), logoutUser()">Kijelentkezés</button>
+        <button @click="emit('loginSuccess'), handleLogoutUser()">Kijelentkezés</button>
       </div>
   </div>
 </template>

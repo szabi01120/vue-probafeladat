@@ -13,8 +13,6 @@ function userLoggedIn(req, res, next) {
     const sessionId = req.headers['x-session-id'];
     const session = sessionService.getSession(sessionId);
 
-    console.log('sessions: ', sessionService.userSessions);
-
     if (!session) {
         return res.status(401).json({ isLoggedIn: false, message: 'Kérjük jeletkezz be!' });
     }
@@ -64,7 +62,6 @@ router.post('/api/login', (req, res) => {
             const sessionId = sessionService.createSession(username, req.ip);
             twoFactorService.setTwoFactorCode(sessionId, twoFactorCode);
             
-            console.log('sessions from login: ', sessionService.getSession(sessionId));
             res.setHeader('X-Session-Id', sessionId);
             res.status(200).json({ isLoggedIn: false, message: 'Kétfaktoros kód elküldve az email címre!' });
         } else {
