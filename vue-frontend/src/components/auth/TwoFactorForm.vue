@@ -1,19 +1,19 @@
 <script setup>
 import { ref, defineEmits } from 'vue';
-import Toast from '../common/Toast.vue';
 import cookieUtils from '@/utils/cookieUtils';
 import startCountdown from '@/utils/countdownUtil';
 import axios from 'axios';
 
-const twoFactorCode = ref('');
-const toastMessage = ref('');
+const API_URL = import.meta.env.VITE_API_URL;
 
-const emit = defineEmits(['is2FaRequired', 'loginSuccess']);
+const emit = defineEmits(['is2FaRequired', 'loginSuccess', 'showToast']);
+
+const twoFactorCode = ref('');
 
 async function verifyTwoFactorCode() {
   try {
     const sessionId = cookieUtils.getSessionCookie();
-    const response = await axios.post('http://localhost:3000/api/verify-2fa', {
+    const response = await axios.post(`${API_URL}/api/verify-2fa`, {
       twoFactorCode: twoFactorCode.value
     }, {
       withCredentials: true,
@@ -27,17 +27,17 @@ async function verifyTwoFactorCode() {
       startCountdown(response.headers['x-session-timeout']);
       emit('is2FaRequired');
       emit('loginSuccess');
-      toastMessage.value = 'Sikeres bejelentkezés.';
+      emit('showToast', 'Sikeres bejelentkezés.');
     }
   } catch (error) {
     console.error('Hiba a kétfaktoros kód ellenőrzésekor:', error);
-    toastMessage.value = 'Hibás kétfaktoros kód.';
+    emit('showToast', 'Hiba a kétfaktoros kód ellenőrzésekor.');
   }
 }
 </script>
 
 <template>
-    <div class="login">
+    <div class="mainSection">
         <div>
             <h2>Adja meg a kétfaktoros kódot</h2>
             <div>
@@ -46,36 +46,11 @@ async function verifyTwoFactorCode() {
             </div>
             <button @click="verifyTwoFactorCode">Küldés</button>
         </div>
-        <Toast v-if="toastMessage" :message="toastMessage" />
     </div>
 </template>
 
 <style scoped>
-.toast {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  background-color: #f44336;
-  color: white;
-  padding: 10px;
-  border-radius: 5px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  animation: fadeInOut 3s ease-in-out;
-}
-
-@keyframes fadeInOut {
-  0%,
-  100% {
-    opacity: 0;
-  }
-
-  10%,
-  90% {
-    opacity: 1;
-  }
-}
-
-.login {
+.mainSection {
   max-width: 400px;
   margin: 0 auto;
   padding: 20px;

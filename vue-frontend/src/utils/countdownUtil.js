@@ -12,7 +12,7 @@ function startSessionCountdown(timeout, onTimeout) {
 
         countdownInterval = setInterval(() => {
             const now = Date.now();
-            const elapsed = lastTimestamp ? now - lastTimestamp : 1000;
+            const elapsed = lastTimestamp ? Math.min(now - lastTimestamp, 1000) : 1000;
             lastTimestamp = now;
 
             remainingTime -= elapsed;

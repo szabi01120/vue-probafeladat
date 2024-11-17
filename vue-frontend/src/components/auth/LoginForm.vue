@@ -1,19 +1,19 @@
 <script setup>
 import { ref, defineProps, defineEmits } from 'vue';
 import cookieUtils from '../../utils/cookieUtils';
-import Toast from '../common/Toast.vue';
 import axios from 'axios';
 
+const API_URL = import.meta.env.VITE_API_URL;
+
 const props = defineProps(['isLoggedIn']);
-const emit = defineEmits(['is2FaRequired']);
+const emit = defineEmits(['is2FaRequired', 'showToast']);
 
 const username = ref('');
 const password = ref('');
-const toastMessage = ref('');
 
 async function loginUser() {
   try {
-    const response = await axios.post('http://localhost:3000/api/login', {
+    const response = await axios.post(`${API_URL}/api/login`, {
       username: username.value,
       password: password.value
     }, {
@@ -23,15 +23,14 @@ async function loginUser() {
     const sessionId = response.headers['x-session-id'];
 
     if (sessionId && response.status === 200 && !response.data.isLoggedIn) {
-      console.log('Session ID sikeresen beállítva:', sessionId);
-      emit('is2FaRequired');
       cookieUtils.setSessionCookie(sessionId);
-      toastMessage.value = '2FA kód elküldve emailben.';
+      emit('is2FaRequired');
+      emit('showToast', '2FA kód elküldve emailben.');
     }
 
   } catch (error) {
     console.error('Hiba a bejelentkezés során:', error);
-    toastMessage.value = 'Hibás felhasználónév vagy jelszó.';
+    emit('showToast', 'Hibás felhasználónév vagy jelszó.');
   }
 }
 </script>
@@ -52,35 +51,10 @@ async function loginUser() {
             <button type="submit">Bejelentkezés</button>
         </form>
         </div>
-        <Toast v-if="toastMessage" :message="toastMessage" />
     </div>
 </template>
 
 <style scoped>
-.toast {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  background-color: #f44336;
-  color: white;
-  padding: 10px;
-  border-radius: 5px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  animation: fadeInOut 3s ease-in-out;
-}
-
-@keyframes fadeInOut {
-  0%,
-  100% {
-    opacity: 0;
-  }
-
-  10%,
-  90% {
-    opacity: 1;
-  }
-}
-
 .login {
   max-width: 400px;
   margin: 0 auto;
@@ -111,10 +85,5 @@ button {
 
 button:hover {
   background-color: #45a049;
-}
-
-p {
-  margin-top: 10px;
-  color: red;
 }
 </style>

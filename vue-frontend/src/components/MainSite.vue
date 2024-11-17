@@ -1,45 +1,41 @@
 <script setup>
-import { ref, watch } from 'vue';
+import { ref, onMounted } from 'vue';
 import axios from 'axios';
 import cookieUtils from '../utils/cookieUtils';
 import startSessionCountdown from '../utils/countdownUtil';
 import formatTimeout from '@/utils/timeUtils';
 
-// Props és események
+const API_URL = import.meta.env.VITE_API_URL;
+
 const props = defineProps(['isLoggedIn', 'user', 'initialSessionTimeout']);
-const emit = defineEmits(['loginSuccess', 'is2FaRequired']);
+const emit = defineEmits(['loginSuccess', 'is2FaRequired', 'showToast']);
 
 const sessionTimeout = ref(props.initialSessionTimeout);
-const toastMessage = ref('');
 
 let countdownInterval = null;
 let countdownController = null;
 
-function showToast(message) {
-  toastMessage.value = message;
-  setTimeout(() => toastMessage.value = '', 3000); // 3 másodperc
-}
-
 function startCountdown(timeout) {
-  console.log('Munkamenet kezdete:', timeout);
+  clearInterval(countdownInterval);
+
   countdownController = startSessionCountdown(timeout, () => {
     emit('loginSuccess');
-    showToast('A munkamenet lejárt. Kérjük, jelentkezzen be újra.');
+    emit('showToast', 'A munkamenet lejárt. Kérjük, jelentkezzen be újra.');
   });
 
   sessionTimeout.value = timeout;
 
-  const interval = setInterval(() => {
+  countdownInterval = setInterval(() => {
     sessionTimeout.value = countdownController.getRemainingTime();
     if (sessionTimeout.value <= 0) {
-      clearInterval(interval);
+      clearInterval(countdownInterval);
     }
   }, 1000);
 }
 
 async function logoutUser() {
   try {
-    await axios.post('http://localhost:3000/api/logout', {}, {
+    await axios.post(`${API_URL}/api/logout`, {}, {
       withCredentials: true,
       headers: {
         'x-session-id': cookieUtils.getSessionCookie()
@@ -49,26 +45,23 @@ async function logoutUser() {
     cookieUtils.deleteSessionCookie();
     clearInterval(countdownInterval);
     emit('loginSuccess');
-    showToast('Sikeres kijelentkezés.');
+    emit('showToast', 'Sikeres kijelentkezés.');
 
   } catch (error) {
-    showToast('Sikertelen kijelentkezés. Kérjük, próbálja újra.');
+    console.error('Hiba a kijelentkezés során:', error);
+    emit('showToast', 'Hiba a kijelentkezés során.');
   }
 }
 
-watch(() => props.isLoggedIn, (newValue) => {
-  console.log('isLoggedIn változás:', newValue);
-  if (newValue) {
+onMounted(() => {
+  if (props.initialSessionTimeout) {
     startCountdown(props.initialSessionTimeout);
-  } else {
-    clearInterval(countdownInterval);
   }
 });
-
 </script>
 
 <template>
-  <div class="login">
+  <div class="mainSection">
       <h1>BELÉPTÉL!</h1>
       <h3>Üdvözöllek, {{ user }}!</h3>
       <p>Ez a védett oldal.</p>
@@ -76,53 +69,17 @@ watch(() => props.isLoggedIn, (newValue) => {
       <div onclick="">
         <button @click="emit('loginSuccess'), logoutUser()">Kijelentkezés</button>
       </div>
-    <div v-if="toastMessage" class="toast">{{ toastMessage }}</div>
   </div>
 </template>
 
 
 <style scoped>
-.toast {
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  background-color: #f44336;
-  color: white;
-  padding: 10px;
-  border-radius: 5px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  animation: fadeInOut 3s ease-in-out;
-}
-
-@keyframes fadeInOut {
-  0%,
-  100% {
-    opacity: 0;
-  }
-
-  10%,
-  90% {
-    opacity: 1;
-  }
-}
-
-.login {
+.mainSection {
   max-width: 400px;
   margin: 0 auto;
   padding: 20px;
   border: 1px solid #ccc;
   border-radius: 5px;
-}
-
-label {
-  display: block;
-  margin-bottom: 5px;
-}
-
-input {
-  width: 100%;
-  padding: 8px;
-  margin-bottom: 10px;
 }
 
 button {
